@@ -1,54 +1,128 @@
 'use strict';
 
+// ============ Supabase Config ============
+// 收到 URL / anon key 後貼到這裡，其餘程式自動切換為雲端模式。
+// 留空時 → 降級為 localStorage（單機模式），站點仍可用。
+const SUPABASE_URL = '';
+const SUPABASE_ANON_KEY = '';
+
 const LS_KEY = 'sort_dashboard_v1';
 const VARIANCE_THRESHOLD = 10000;
 const AUTH_KEY = 'sort_dashboard_auth_v1';
 const ADMIN_USER = 'admin';
-const ADMIN_PASS = 'admin';
+const ADMIN_PASS = 'admin'; // localStorage fallback only
+const ADMIN_EMAIL_DOMAIN = 'sorting.local';
 
 const WEEKDAY_TW = ['日','一','二','三','四','五','六'];
 
-// ============ Storage ============
-function loadUser() {
-  try { return JSON.parse(localStorage.getItem(LS_KEY)) || {}; }
-  catch { return {}; }
+// camelCase (JS) <-> snake_case (DB)
+const FIELDS_TO_ROW = {
+  estPicks: 'est_picks', estBoxes: 'est_boxes', estEnd: 'est_end',
+  totalPicks: 'total_picks', totalBoxes: 'total_boxes', totalEnd: 'total_end',
+  aStations: 'a_stations', bStations: 'b_stations', varianceNote: 'variance_note',
+};
+const FIELDS_TO_JS = Object.fromEntries(
+  Object.entries(FIELDS_TO_ROW).map(([k, v]) => [v, k])
+);
+function rowToEntry(row) {
+  const e = {};
+  for (const [dbKey, jsKey] of Object.entries(FIELDS_TO_JS)) {
+    if (row[dbKey] != null) e[jsKey] = row[dbKey];
+  }
+  return e;
+}
+function patchToRow(patch) {
+  const r = {};
+  for (const [jsKey, dbKey] of Object.entries(FIELDS_TO_ROW)) {
+    if (jsKey in patch) r[dbKey] = patch[jsKey];
+  }
+  return r;
 }
 
-function saveUser(data) {
-  localStorage.setItem(LS_KEY, JSON.stringify(data));
+// ============ Storage Layer ============
+let userCache = {}; // date -> entry (merge result shown to UI)
+let supa = null;    // Supabase client (null = LS mode)
+const USE_SUPABASE = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
+
+function loadUser() { return userCache; }
+
+function saveUserCacheLS() {
+  localStorage.setItem(LS_KEY, JSON.stringify(userCache));
 }
 
-function getUserEntry(date) {
-  const u = loadUser();
-  return u[date] || {};
+async function initUserData() {
+  if (USE_SUPABASE) {
+    supa = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    try {
+      const { data, error } = await supa.from('entries').select('*');
+      if (error) throw error;
+      userCache = Object.fromEntries((data || []).map(r => [r.date, rowToEntry(r)]));
+    } catch (e) {
+      console.error('Supabase 讀取失敗，降級為本機模式:', e);
+      supa = null;
+      loadUserFromLS();
+    }
+    if (supa) subscribeRealtime();
+  } else {
+    loadUserFromLS();
+  }
 }
 
-function upsertUserEntry(date, patch) {
-  const u = loadUser();
-  u[date] = { ...(u[date] || {}), ...patch };
-  saveUser(u);
+function loadUserFromLS() {
+  try { userCache = JSON.parse(localStorage.getItem(LS_KEY)) || {}; }
+  catch { userCache = {}; }
+}
+
+function subscribeRealtime() {
+  supa.channel('entries-sync')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'entries' }, (payload) => {
+      const row = payload.new || payload.old;
+      if (!row?.date) return;
+      if (payload.eventType === 'DELETE') delete userCache[row.date];
+      else userCache[row.date] = rowToEntry(payload.new);
+      renderAll();
+      renderForecast();
+      renderActualForm();
+    })
+    .subscribe();
+}
+
+function getUserEntry(date) { return userCache[date] || {}; }
+
+async function upsertUserEntry(date, patch) {
+  userCache[date] = { ...(userCache[date] || {}), ...patch };
+  if (supa) {
+    const { error } = await supa.from('entries').upsert({ date, ...patchToRow(patch) });
+    if (error) { alert('儲存失敗：' + error.message); throw error; }
+  } else {
+    saveUserCacheLS();
+  }
 }
 
 // ============ Auth ============
-function isLoggedIn() {
-  return sessionStorage.getItem(AUTH_KEY) === ADMIN_USER;
-}
+let authCache = { logged: false, user: null };
 
-function setLoggedIn(user) {
-  sessionStorage.setItem(AUTH_KEY, user);
-}
+function isLoggedIn() { return authCache.logged; }
 
-function clearLogin() {
-  sessionStorage.removeItem(AUTH_KEY);
+async function refreshAuth() {
+  if (supa) {
+    const { data: { session } } = await supa.auth.getSession();
+    authCache.logged = Boolean(session);
+    authCache.user = session?.user?.email?.split('@')[0] || null;
+  } else {
+    const v = sessionStorage.getItem(AUTH_KEY);
+    authCache.logged = v === ADMIN_USER;
+    authCache.user = authCache.logged ? ADMIN_USER : null;
+  }
+  applyAuthState();
 }
 
 function applyAuthState() {
-  const logged = isLoggedIn();
+  const logged = authCache.logged;
   document.getElementById('loginBtn').classList.toggle('hidden', logged);
   document.getElementById('authStatus').classList.toggle('hidden', !logged);
-  if (logged) document.getElementById('authUser').textContent = ADMIN_USER;
+  if (logged) document.getElementById('authUser').textContent = authCache.user || ADMIN_USER;
 
-  // 鎖定 / 解鎖：只 disable 原生輸入控件，不擋版面（結果仍可見）
   document.querySelectorAll('.lock-form').forEach(form => {
     form.classList.toggle('locked', !logged);
     form.querySelectorAll('input, textarea, select, button').forEach(el => {
@@ -68,21 +142,42 @@ function closeLoginModal() {
   document.getElementById('loginModal').classList.add('hidden');
 }
 
-function handleLoginSubmit(e) {
+async function handleLoginSubmit(e) {
   e.preventDefault();
   const u = document.getElementById('loginUser').value.trim();
   const p = document.getElementById('loginPass').value;
-  if (u === ADMIN_USER && p === ADMIN_PASS) {
-    setLoggedIn(u);
+  const errEl = document.getElementById('loginError');
+  errEl.classList.add('hidden');
+
+  if (supa) {
+    const email = u.includes('@') ? u : `${u}@${ADMIN_EMAIL_DOMAIN}`;
+    const { error } = await supa.auth.signInWithPassword({ email, password: p });
+    if (error) {
+      errEl.textContent = '登入失敗：' + error.message;
+      errEl.classList.remove('hidden');
+      return;
+    }
+    authCache.logged = true;
+    authCache.user = u;
     closeLoginModal();
     applyAuthState();
   } else {
-    document.getElementById('loginError').classList.remove('hidden');
+    if (u === ADMIN_USER && p === ADMIN_PASS) {
+      sessionStorage.setItem(AUTH_KEY, u);
+      authCache = { logged: true, user: u };
+      closeLoginModal();
+      applyAuthState();
+    } else {
+      errEl.textContent = '帳號或密碼錯誤';
+      errEl.classList.remove('hidden');
+    }
   }
 }
 
-function handleLogout() {
-  clearLogin();
+async function handleLogout() {
+  if (supa) await supa.auth.signOut();
+  sessionStorage.removeItem(AUTH_KEY);
+  authCache = { logged: false, user: null };
   applyAuthState();
 }
 
@@ -475,13 +570,13 @@ function renderForecast() {
   }
 }
 
-function runForecast() {
+async function runForecast() {
   if (!isLoggedIn()) { openLoginModal(); return; }
   const date = getForecastTargetDate();
   const estPicks = parseInt(document.getElementById('estPicks').value, 10);
   if (!estPicks || !date) return;
   const pred = predict(estPicks, date);
-  upsertUserEntry(date, { estPicks, estBoxes: pred.estBoxes, estEnd: pred.estEnd });
+  await upsertUserEntry(date, { estPicks, estBoxes: pred.estBoxes, estEnd: pred.estEnd });
 
   document.getElementById('resBoxes').textContent = fmtNum(pred.estBoxes);
   document.getElementById('resEnd').textContent = pred.estEnd || '—';
@@ -560,7 +655,7 @@ function renderVarianceWarning(rec) {
   }
 }
 
-function saveActualForm(e) {
+async function saveActualForm(e) {
   e.preventDefault();
   if (!isLoggedIn()) { openLoginModal(); return; }
   const date = document.getElementById('actualDate').value;
@@ -590,7 +685,7 @@ function saveActualForm(e) {
       patch.totalEnd = allTimes.reduce((best, t) => toMin(t) > toMin(best) ? t : best);
     }
   }
-  upsertUserEntry(date, patch);
+  await upsertUserEntry(date, patch);
   renderAll();
   alert('已儲存 ' + date + ' 的資料');
 }
@@ -604,11 +699,15 @@ function renderAll() {
   renderHistory(records);
 }
 
-function init() {
+async function init() {
   const seed = window.SEED;
   document.getElementById('stdPicks').textContent = fmtNum(seed.standards.picks);
   document.getElementById('stdBoxes').textContent = fmtNum(seed.standards.boxes);
   document.getElementById('stdEnd').textContent = formatMins(getStandardTotalEnd());
+
+  // 先載入雲端資料 & 還原登入狀態（雲端模式首次打開約 < 1s）
+  await initUserData();
+  await refreshAuth();
 
   // 檢視日期預設＝最新一筆有資料的日期；實際回填日期錨定於今日
   const records = getAllRecords();
@@ -649,7 +748,6 @@ function init() {
     if (e.target.id === 'loginModal') closeLoginModal();
   });
   document.getElementById('loginForm').addEventListener('submit', handleLoginSubmit);
-  applyAuthState();
 
   renderAll();
   renderForecast();
