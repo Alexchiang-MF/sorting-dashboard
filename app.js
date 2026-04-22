@@ -3,15 +3,15 @@
 // ============ Supabase Config ============
 // 收到 URL / anon key 後貼到這裡，其餘程式自動切換為雲端模式。
 // 留空時 → 降級為 localStorage（單機模式），站點仍可用。
-const SUPABASE_URL = '';
-const SUPABASE_ANON_KEY = '';
+const SUPABASE_URL = 'https://peisbkgpygtjnarqeyeo.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBlaXNia2dweWd0am5hcnFleWVvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4MjM2MTQsImV4cCI6MjA5MjM5OTYxNH0.6-i8KuRBpfeAj1gS4gi5DhvQRNrQXC0AT9NG4hdwXEU';
 
 const LS_KEY = 'sort_dashboard_v1';
 const VARIANCE_THRESHOLD = 10000;
 const AUTH_KEY = 'sort_dashboard_auth_v1';
 const ADMIN_USER = 'admin';
 const ADMIN_PASS = 'admin'; // localStorage fallback only
-const ADMIN_EMAIL_DOMAIN = 'sorting.local';
+const ADMIN_EMAIL_ALIAS = 'miaofang0814@gmail.com'; // 輸入「admin」時對應到此 Supabase 帳號
 
 const WEEKDAY_TW = ['日','一','二','三','四','五','六'];
 
@@ -150,7 +150,7 @@ async function handleLoginSubmit(e) {
   errEl.classList.add('hidden');
 
   if (supa) {
-    const email = u.includes('@') ? u : `${u}@${ADMIN_EMAIL_DOMAIN}`;
+    const email = u.includes('@') ? u : ADMIN_EMAIL_ALIAS;
     const { error } = await supa.auth.signInWithPassword({ email, password: p });
     if (error) {
       errEl.textContent = '登入失敗：' + error.message;
@@ -563,7 +563,17 @@ function renderForecast() {
 
   if (rec.estPicks) {
     document.getElementById('estPicks').value = rec.estPicks;
-    runForecast();
+    // 直接顯示已存的預測結果（未登入也看得到），不觸發新的寫入
+    if (rec.estBoxes != null && rec.estEnd) {
+      document.getElementById('resBoxes').textContent = fmtNum(rec.estBoxes);
+      document.getElementById('resEnd').textContent = rec.estEnd;
+      const chk = checkDelayed(rec.estEnd.replace(' (+1)', ''));
+      let statusLabel = '—';
+      if (chk.status === 'ontime') statusLabel = '預計準時';
+      else if (chk.status === 'delayed') statusLabel = `預計延遲 ${chk.diff} 分`;
+      document.getElementById('resStatus').textContent = statusLabel;
+      document.getElementById('forecastResult').classList.remove('hidden');
+    }
   } else {
     document.getElementById('estPicks').value = '';
     document.getElementById('forecastResult').classList.add('hidden');
