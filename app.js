@@ -10,7 +10,7 @@ const LS_KEY = 'sort_dashboard_v1';
 const VARIANCE_THRESHOLD = 10000;
 const AUTH_KEY = 'sort_dashboard_auth_v1';
 const ADMIN_USER = 'admin';
-const ADMIN_PASS = 'admin'; // localStorage fallback only
+const ADMIN_PASS = 'admin'; // localStorage fallback only（雲端實際密碼在 Supabase auth.users）
 const ADMIN_EMAIL_ALIAS = 'miaofang0814@gmail.com'; // 輸入「admin」時對應到此 Supabase 帳號
 
 const WEEKDAY_TW = ['日','一','二','三','四','五','六'];
