@@ -551,47 +551,21 @@ tbody tr:hover { background: #f8fafc; }
   font-size: 13px;
 }
 
-/* Locked (未登入) editing regions */
-.lock-wrap { position: relative; }
-.lock-wrap.locked > :not(.lock-overlay) {
-  opacity: 0.55;
-  pointer-events: none;
-  user-select: none;
-  filter: grayscale(0.2);
-}
-.lock-overlay {
-  display: none;
-  position: absolute;
-  inset: 0;
-  align-items: center;
-  justify-content: center;
-  background: rgba(248, 250, 252, 0.55);
-  border-radius: var(--radius);
-  z-index: 2;
-}
-.lock-wrap.locked .lock-overlay { display: flex; }
-.lock-overlay .lock-msg {
-  background: var(--card);
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow);
-  padding: 10px 16px;
-  border-radius: 999px;
-  font-size: 13px;
+/* Locked (未登入) editing regions：原生 disabled + 小提示，不做遮罩 */
+.lock-hint { display: none; font-size: 12px; padding: 4px 0; }
+.lock-form.locked .lock-hint { display: inline-block; }
+.lock-form input:disabled,
+.lock-form textarea:disabled,
+.lock-form select:disabled {
+  background: var(--bg);
   color: var(--muted);
+  cursor: not-allowed;
 }
-.lock-overlay .lock-msg strong { color: var(--text); }
-.lock-overlay button {
-  margin-left: 10px;
-  padding: 6px 12px;
-  background: var(--primary);
+.lock-form button:disabled {
+  background: #cbd5e1;
   color: #fff;
-  border: 0;
-  border-radius: 999px;
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
+  cursor: not-allowed;
 }
-.lock-overlay button:hover { background: #1d4ed8; }
 
 @media (max-width: 960px) {
   .kpi-row, .chart-grid, .two-col { grid-template-columns: 1fr; }

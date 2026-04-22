@@ -35,18 +35,14 @@
         <h2>今日預估</h2>
         <span class="muted" id="forecastMeta"></span>
       </div>
-      <div class="forecast-layout lock-wrap" id="forecastLockWrap">
-        <div class="lock-overlay">
-          <div class="lock-msg"><strong>🔒 請先登入</strong>才能輸入預估揀次
-            <button type="button" data-login-trigger>登入</button>
-          </div>
-        </div>
-        <form id="forecastForm" class="forecast-input">
+      <div class="forecast-layout">
+        <form id="forecastForm" class="forecast-input lock-form">
           <label>
             預估揀次
             <input type="number" id="estPicks" min="0" step="100" placeholder="例如 65000">
           </label>
           <button type="submit">計算預測</button>
+          <span class="lock-hint muted">🔒 登入後可編輯</span>
         </form>
         <div class="forecast-result hidden" id="forecastResult">
           <div class="result-item">
@@ -108,12 +104,8 @@
         <h2>實際資料回填</h2>
         <span class="muted">隔日填寫昨日結果</span>
       </div>
-      <form id="actualForm" class="form-grid actual-form lock-wrap">
-        <div class="lock-overlay">
-          <div class="lock-msg"><strong>🔒 請先登入</strong>才能填寫實際資料
-            <button type="button" data-login-trigger>登入</button>
-          </div>
-        </div>
+      <form id="actualForm" class="form-grid actual-form lock-form">
+        <span class="lock-hint muted">🔒 登入後可編輯</span>
         <div class="actual-row-top">
           <label>
             日期

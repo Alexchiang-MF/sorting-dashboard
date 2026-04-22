@@ -48,9 +48,12 @@ function applyAuthState() {
   document.getElementById('authStatus').classList.toggle('hidden', !logged);
   if (logged) document.getElementById('authUser').textContent = ADMIN_USER;
 
-  // 鎖定 / 解鎖編輯區塊（預估輸入 + 實際回填）
-  document.querySelectorAll('.lock-wrap').forEach(el => {
-    el.classList.toggle('locked', !logged);
+  // 鎖定 / 解鎖：只 disable 原生輸入控件，不擋版面（結果仍可見）
+  document.querySelectorAll('.lock-form').forEach(form => {
+    form.classList.toggle('locked', !logged);
+    form.querySelectorAll('input, textarea, select, button').forEach(el => {
+      el.disabled = !logged;
+    });
   });
 }
 
@@ -646,9 +649,6 @@ function init() {
     if (e.target.id === 'loginModal') closeLoginModal();
   });
   document.getElementById('loginForm').addEventListener('submit', handleLoginSubmit);
-  document.querySelectorAll('[data-login-trigger]').forEach(el => {
-    el.addEventListener('click', openLoginModal);
-  });
   applyAuthState();
 
   renderAll();
