@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>分揀貨量管理儀表板</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-left">
+      <h1>分揀貨量管理儀表板</h1>
+      <span class="subtitle" id="todayLabel"></span>
+    </div>
+    <div class="topbar-right">
+      <label class="date-picker">
+        檢視日期
+        <input type="date" id="viewDate">
+      </label>
+      <div class="auth-area">
+        <button type="button" id="loginBtn" class="auth-btn">登入</button>
+        <span id="authStatus" class="auth-status hidden">
+          <span class="auth-user">👤 <strong id="authUser"></strong></span>
+          <button type="button" id="logoutBtn" class="auth-btn secondary">登出</button>
+        </span>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- Row 1: 今日預估 (top) -->
+    <section class="card forecast-card">
+      <div class="card-header">
+        <h2>今日預估</h2>
+        <span class="muted" id="forecastMeta"></span>
+      </div>
+      <div class="forecast-layout lock-wrap" id="forecastLockWrap">
+        <div class="lock-overlay">
+          <div class="lock-msg"><strong>🔒 請先登入</strong>才能輸入預估揀次
+            <button type="button" data-login-trigger>登入</button>
+          </div>
+        </div>
+        <form id="forecastForm" class="forecast-input">
+          <label>
+            預估揀次
+            <input type="number" id="estPicks" min="0" step="100" placeholder="例如 65000">
+          </label>
+          <button type="submit">計算預測</button>
+        </form>
+        <div class="forecast-result hidden" id="forecastResult">
+          <div class="result-item">
+            <span>預估總箱數</span>
+            <strong id="resBoxes">—</strong>
+          </div>
+          <div class="result-item">
+            <span>預估總結束時間</span>
+            <strong id="resEnd">—</strong>
+          </div>
+          <div class="result-item">
+            <span>預估完成狀態</span>
+            <strong id="resStatus">—</strong>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Row 2: KPI cards + status (昨日/上一筆有資料日期) -->
+    <section class="kpi-row">
+      <div class="card kpi-card">
+        <div class="kpi-label">總揀次</div>
+        <div class="kpi-value" id="kpiPicks">—</div>
+        <div class="kpi-trend" id="kpiPicksTrend"></div>
+      </div>
+      <div class="card kpi-card">
+        <div class="kpi-label">總箱數</div>
+        <div class="kpi-value" id="kpiBoxes">—</div>
+        <div class="kpi-trend" id="kpiBoxesTrend"></div>
+      </div>
+      <div class="card kpi-card">
+        <div class="kpi-label">pcs/箱</div>
+        <div class="kpi-value" id="kpiRatio">—</div>
+        <div class="kpi-trend" id="kpiRatioTrend"></div>
+      </div>
+      <div class="card kpi-card status-card" id="statusCard">
+        <div class="kpi-label">完成狀態</div>
+        <div class="kpi-value status-value" id="statusText">—</div>
+        <div class="kpi-trend" id="statusDetail"></div>
+      </div>
+    </section>
+
+    <!-- Row 3: Trend charts -->
+    <section class="card">
+      <div class="card-header">
+        <h2>近7日貨量趨勢</h2>
+        <span class="muted">總揀次、總箱數、pcs/箱比</span>
+      </div>
+      <div class="chart-grid">
+        <div class="chart-wrap"><canvas id="picksChart"></canvas></div>
+        <div class="chart-wrap"><canvas id="boxesChart"></canvas></div>
+        <div class="chart-wrap"><canvas id="ratioChart"></canvas></div>
+      </div>
+    </section>
+
+    <!-- Row 4: 實際資料回填 -->
+    <section class="card">
+      <div class="card-header">
+        <h2>實際資料回填</h2>
+        <span class="muted">隔日填寫昨日結果</span>
+      </div>
+      <form id="actualForm" class="form-grid actual-form lock-wrap">
+        <div class="lock-overlay">
+          <div class="lock-msg"><strong>🔒 請先登入</strong>才能填寫實際資料
+            <button type="button" data-login-trigger>登入</button>
+          </div>
+        </div>
+        <div class="actual-row-top">
+          <label>
+            日期
+            <input type="date" id="actualDate" required>
+          </label>
+          <label>
+            實際揀次
+            <input type="number" id="actPicks" min="0" step="1">
+          </label>
+          <label>
+            實際總箱數
+            <input type="number" id="actBoxes" min="0" step="1">
+          </label>
+          <label>
+            總結束時間
+            <input type="time" id="actTotalEnd">
+          </label>
+        </div>
+        <details class="station-details">
+          <summary>填寫各節點結束時間（選填，供延遲分析）</summary>
+          <div id="stationInputs" class="station-grid"></div>
+        </details>
+        <div class="variance-warning hidden" id="varianceWarn">
+          <strong id="varianceTitle">⚠ 揀次差異警示</strong>
+          <p class="muted" id="varianceDetail"></p>
+          <label>差異原因說明
+            <textarea id="varianceNote" rows="3" placeholder="請輸入差異原因（例如：突發促銷、系統異常、標案放量…）"></textarea>
+          </label>
+        </div>
+        <button type="submit">儲存實際資料</button>
+      </form>
+    </section>
+
+    <!-- Row: History table -->
+    <section class="card">
+      <div class="card-header">
+        <h2>近30日紀錄</h2>
+        <span class="muted">點擊「延遲」以查看各節點明細</span>
+      </div>
+      <div class="table-wrap">
+        <table id="historyTable">
+          <thead>
+            <tr>
+              <th>日期</th>
+              <th>星期</th>
+              <th>預估揀次</th>
+              <th>實際揀次</th>
+              <th>差異</th>
+              <th>總箱數</th>
+              <th>pcs/箱</th>
+              <th>結束時間</th>
+              <th>狀態</th>
+              <th>備註</th>
+            </tr>
+          </thead>
+          <tbody id="historyBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <!-- Login Modal -->
+  <div class="modal-backdrop hidden" id="loginModal">
+    <div class="modal-card login-card">
+      <div class="modal-head">
+        <h3>管理員登入</h3>
+        <button class="close-btn" id="loginClose">×</button>
+      </div>
+      <div class="modal-body">
+        <form id="loginForm" class="login-form">
+          <label>
+            帳號
+            <input type="text" id="loginUser" autocomplete="username" required>
+          </label>
+          <label>
+            密碼
+            <input type="password" id="loginPass" autocomplete="current-password" required>
+          </label>
+          <div class="login-error hidden" id="loginError">帳號或密碼錯誤</div>
+          <button type="submit">登入</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Drill-down Modal -->
+  <div class="modal-backdrop hidden" id="modal">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3 id="modalTitle">各節點結束時間 vs 標準</h3>
+        <button class="close-btn" id="modalClose">×</button>
+      </div>
+      <div class="modal-body">
+        <table id="stationTable">
+          <thead>
+            <tr>
+              <th>節點</th>
+              <th>標準</th>
+              <th>A 班實際</th>
+              <th>A 差異</th>
+              <th>B 班實際</th>
+              <th>B 差異</th>
+            </tr>
+          </thead>
+          <tbody id="stationTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <footer class="footer muted">
+    <span>標準揀次 <strong id="stdPicks"></strong> · 標準箱數 <strong id="stdBoxes"></strong> · 標準總結束時間 <strong id="stdEnd"></strong></span>
+  </footer>
+
+  <script src="seed-data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
