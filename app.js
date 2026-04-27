@@ -629,51 +629,89 @@ function downloadStationTemplate() {
   const std = window.SEED.standards.stations;
   const date = document.getElementById('actualDate').value || window.SEED.today;
 
-  const rows = [['節點', 'A線標準', 'A線實際', 'B線標準', 'B線實際']];
+  const headers = ['節點', 'A線標準', 'A線實際', 'B線標準', 'B線實際'];
+  const data = [headers];
   for (const s of stations) {
-    rows.push([s, std[s]?.A || '', '', std[s]?.B || '', '']);
+    data.push([s, std[s]?.A || '', '', std[s]?.B || '', '']);
   }
-  const csv = rows.map(r => r.map(cell => {
-    const v = String(cell ?? '');
-    return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
-  }).join(',')).join('\r\n');
 
-  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  ws['!cols'] = [{ wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 14 }];
+
+  const thinBorder = { style: 'thin', color: { rgb: 'CBD5E1' } };
+  const allBorders = { top: thinBorder, bottom: thinBorder, left: thinBorder, right: thinBorder };
+
+  const headerStyle = {
+    font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 12 },
+    fill: { patternType: 'solid', fgColor: { rgb: '2563EB' } },
+    alignment: { horizontal: 'center', vertical: 'center' },
+    border: allBorders,
+  };
+  const stationStyle = {
+    font: { bold: true },
+    alignment: { horizontal: 'center', vertical: 'center' },
+    border: allBorders,
+  };
+  const stdStyle = {
+    fill: { patternType: 'solid', fgColor: { rgb: 'F1F5F9' } },
+    font: { color: { rgb: '64748B' } },
+    alignment: { horizontal: 'center', vertical: 'center' },
+    border: allBorders,
+  };
+  const actualStyle = {
+    fill: { patternType: 'solid', fgColor: { rgb: 'FEF3C7' } },
+    alignment: { horizontal: 'center', vertical: 'center' },
+    border: allBorders,
+    numFmt: 'hh:mm',
+  };
+
+  for (let c = 0; c < headers.length; c++) {
+    const ref = XLSX.utils.encode_cell({ r: 0, c });
+    if (ws[ref]) ws[ref].s = headerStyle;
+  }
+  for (let r = 1; r < data.length; r++) {
+    const stationRef = XLSX.utils.encode_cell({ r, c: 0 });
+    if (ws[stationRef]) ws[stationRef].s = stationStyle;
+    for (const c of [1, 3]) {
+      const ref = XLSX.utils.encode_cell({ r, c });
+      if (ws[ref]) ws[ref].s = stdStyle;
+    }
+    for (const c of [2, 4]) {
+      const ref = XLSX.utils.encode_cell({ r, c });
+      if (!ws[ref]) ws[ref] = { t: 's', v: '' };
+      ws[ref].s = actualStyle;
+    }
+  }
+
+  ws['!rows'] = [{ hpt: 22 }];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '節點時間');
+  const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array', cellStyles: true });
+  const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `節點結束時間_${date}.csv`;
+  a.download = `節點結束時間_${date}.xlsx`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
 
-function parseCsvLine(line) {
-  const out = [];
-  let cur = '';
-  let inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (inQuotes) {
-      if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++; }
-      else if (ch === '"') inQuotes = false;
-      else cur += ch;
-    } else {
-      if (ch === '"') inQuotes = true;
-      else if (ch === ',') { out.push(cur); cur = ''; }
-      else cur += ch;
-    }
-  }
-  out.push(cur);
-  return out;
-}
-
 function normalizeTime(s) {
-  if (!s) return null;
+  if (s == null || s === '') return null;
+  // Excel time fraction: 0 = 00:00, 0.5 = 12:00, 0.6666... = 16:00
+  if (typeof s === 'number') {
+    if (s < 0 || s >= 2) return null;
+    const totalMins = Math.round(s * 24 * 60);
+    const hh = Math.floor(totalMins / 60) % 24;
+    const mm = totalMins % 60;
+    return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+  }
   const t = String(s).trim();
   if (!t) return null;
-  const m = t.match(/^(\d{1,2}):(\d{2})$/);
+  const m = t.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
   if (!m) return null;
   const hh = String(parseInt(m[1], 10)).padStart(2, '0');
   return `${hh}:${m[2]}`;
@@ -684,26 +722,29 @@ async function handleStationFileImport(e) {
   if (!file) return;
   const status = document.getElementById('stationImportStatus');
   try {
-    const text = await file.text();
-    const cleaned = text.replace(/^﻿/, '');
-    const lines = cleaned.split(/\r?\n/).filter(l => l.trim());
-    if (lines.length < 2) throw new Error('檔案沒有資料列');
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: 'array', cellDates: false });
+    const sheetName = wb.SheetNames[0];
+    if (!sheetName) throw new Error('檔案沒有工作表');
+    const ws = wb.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true });
+    if (rows.length < 2) throw new Error('檔案沒有資料列');
 
     const knownStations = new Set(window.SEED.stations);
     const a = {}, b = {};
     let imported = 0;
     let skipped = 0;
-    for (let i = 1; i < lines.length; i++) {
-      const cols = parseCsvLine(lines[i]);
-      const station = (cols[0] || '').trim();
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      const station = String(row[0] || '').trim();
       if (!station) continue;
       if (!knownStations.has(station)) { skipped++; continue; }
-      const aActual = normalizeTime(cols[2]);
-      const bActual = normalizeTime(cols[4]);
+      const aActual = normalizeTime(row[2]);
+      const bActual = normalizeTime(row[4]);
       if (aActual) { a[station] = aActual; imported++; }
       if (bActual) { b[station] = bActual; imported++; }
     }
-    if (imported === 0) throw new Error('找不到任何有效時間（請確認 A線實際 / B線實際 欄位格式為 HH:MM）');
+    if (imported === 0) throw new Error('找不到任何有效時間（請確認 A線實際 / B線實際 欄位格式為時間）');
 
     stationImportData = { a, b };
     renderStationPreview(imported);

@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="styles.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 </head>
 <body>
   <header class="topbar">
@@ -128,12 +129,12 @@
         <div class="station-import">
           <div class="station-import-head">
             <strong>各節點結束時間</strong>
-            <span class="muted">（選填，供延遲分析；用 CSV 匯入更快）</span>
+            <span class="muted">（選填，供延遲分析；用 Excel 匯入更快）</span>
           </div>
           <div class="station-import-actions">
-            <button type="button" id="downloadTemplateBtn" class="ghost-btn always-enabled">📥 下載範例檔 (CSV)</button>
+            <button type="button" id="downloadTemplateBtn" class="ghost-btn always-enabled">📥 下載範例檔 (Excel)</button>
             <label class="ghost-btn upload-btn" for="stationFileInput">📤 匯入填寫檔
-              <input type="file" id="stationFileInput" accept=".csv,text/csv" hidden>
+              <input type="file" id="stationFileInput" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
             </label>
             <button type="button" id="clearStationBtn" class="ghost-btn danger hidden">清除匯入</button>
           </div>
