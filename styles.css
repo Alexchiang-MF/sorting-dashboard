@@ -297,48 +297,58 @@ main {
   color: #1e40af;
 }
 
-.station-details summary {
-  cursor: pointer;
-  font-size: 13px;
-  color: var(--primary);
-  padding: 6px 0;
-}
-
-.station-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 8px 12px;
-  margin-top: 8px;
-  padding: 10px;
+.station-import {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
   background: var(--bg);
+}
+.station-import-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.station-import-head strong { font-size: 14px; }
+.station-import-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.ghost-btn {
+  padding: 7px 12px;
+  background: #fff;
+  color: var(--primary);
+  border: 1px solid var(--primary);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.ghost-btn:hover { background: var(--primary-soft); }
+.ghost-btn.danger { color: var(--danger); border-color: var(--danger); }
+.ghost-btn.danger:hover { background: var(--danger-soft); }
+.upload-btn { cursor: pointer; }
+.lock-form.locked .upload-btn { cursor: not-allowed; opacity: 0.55; }
+.station-import-status { font-size: 13px; padding: 4px 0; }
+.station-import-status .import-error { color: var(--danger); }
+.station-import-preview {
+  margin-top: 10px;
+  max-height: 280px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid var(--border);
   border-radius: 6px;
 }
-
-.station-grid .station-row {
-  display: grid;
-  grid-template-columns: 80px 1fr 1fr;
-  gap: 6px;
-  align-items: center;
-  font-size: 12px;
-}
-
-.station-grid .station-row input {
-  padding: 4px 6px;
-  font-size: 12px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-}
-
-.station-grid .station-header {
-  display: grid;
-  grid-template-columns: 80px 1fr 1fr;
-  gap: 6px;
-  font-size: 11px;
-  color: var(--muted);
-  grid-column: 1 / -1;
-  padding-bottom: 2px;
-  border-bottom: 1px solid var(--border);
-}
+.preview-table { font-size: 12px; }
+.preview-table th { padding: 6px 10px; }
+.preview-table td { padding: 6px 10px; white-space: nowrap; }
 
 .variance-warning {
   padding: 12px 14px;
@@ -572,5 +582,4 @@ tbody tr:hover { background: #f8fafc; }
   .forecast-layout { grid-template-columns: 1fr; }
   .forecast-result { grid-template-columns: 1fr; }
   .actual-row-top { grid-template-columns: 1fr 1fr; }
-  .station-grid { grid-template-columns: 1fr; }
 }

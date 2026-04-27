@@ -126,6 +126,7 @@ function applyAuthState() {
   document.querySelectorAll('.lock-form').forEach(form => {
     form.classList.toggle('locked', !logged);
     form.querySelectorAll('input, textarea, select, button').forEach(el => {
+      if (el.classList.contains('always-enabled')) { el.disabled = false; return; }
       el.disabled = !logged;
     });
   });
@@ -611,41 +612,164 @@ function renderActualForm() {
   document.getElementById('actPicks').value = rec.totalPicks ?? '';
   document.getElementById('actBoxes').value = rec.totalBoxes ?? '';
   document.getElementById('actTotalEnd').value = rec.totalEnd ?? '';
-  renderStationInputs(rec);
+  loadStationDataFromRecord(rec);
   renderVarianceWarning(rec);
   document.getElementById('varianceNote').value = rec.varianceNote ?? '';
 }
 
-function renderStationInputs(rec) {
-  const stations = window.SEED.stations;
-  const std = window.SEED.standards.stations;
-  const root = document.getElementById('stationInputs');
-  root.innerHTML = `<div class="station-header"><span>節點</span><span>A班 (標準/實際)</span><span>B班 (標準/實際)</span></div>` +
-    stations.map(s => `
-      <div class="station-row">
-        <span><strong>${s}</strong></span>
-        <span>
-          <small class="muted">${std[s]?.A || ''}</small>
-          <input type="time" data-station="${s}" data-class="A" value="${rec.aStations?.[s] || ''}">
-        </span>
-        <span>
-          <small class="muted">${std[s]?.B || ''}</small>
-          <input type="time" data-station="${s}" data-class="B" value="${rec.bStations?.[s] || ''}">
-        </span>
-      </div>
-    `).join('');
-}
+// ============ Station CSV import ============
+let stationImportData = { a: {}, b: {} };
 
 function collectStationInputs() {
-  const a = {}, b = {};
-  document.querySelectorAll('#stationInputs input[type="time"]').forEach(inp => {
-    const s = inp.dataset.station;
-    const c = inp.dataset.class;
-    const v = inp.value || null;
-    if (c === 'A') a[s] = v;
-    else b[s] = v;
-  });
-  return { a, b };
+  return { a: { ...stationImportData.a }, b: { ...stationImportData.b } };
+}
+
+function downloadStationTemplate() {
+  const stations = window.SEED.stations;
+  const std = window.SEED.standards.stations;
+  const date = document.getElementById('actualDate').value || window.SEED.today;
+
+  const rows = [['節點', 'A線標準', 'A線實際', 'B線標準', 'B線實際']];
+  for (const s of stations) {
+    rows.push([s, std[s]?.A || '', '', std[s]?.B || '', '']);
+  }
+  const csv = rows.map(r => r.map(cell => {
+    const v = String(cell ?? '');
+    return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+  }).join(',')).join('\r\n');
+
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `節點結束時間_${date}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function parseCsvLine(line) {
+  const out = [];
+  let cur = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuotes) {
+      if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++; }
+      else if (ch === '"') inQuotes = false;
+      else cur += ch;
+    } else {
+      if (ch === '"') inQuotes = true;
+      else if (ch === ',') { out.push(cur); cur = ''; }
+      else cur += ch;
+    }
+  }
+  out.push(cur);
+  return out;
+}
+
+function normalizeTime(s) {
+  if (!s) return null;
+  const t = String(s).trim();
+  if (!t) return null;
+  const m = t.match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return null;
+  const hh = String(parseInt(m[1], 10)).padStart(2, '0');
+  return `${hh}:${m[2]}`;
+}
+
+async function handleStationFileImport(e) {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  const status = document.getElementById('stationImportStatus');
+  try {
+    const text = await file.text();
+    const cleaned = text.replace(/^﻿/, '');
+    const lines = cleaned.split(/\r?\n/).filter(l => l.trim());
+    if (lines.length < 2) throw new Error('檔案沒有資料列');
+
+    const knownStations = new Set(window.SEED.stations);
+    const a = {}, b = {};
+    let imported = 0;
+    let skipped = 0;
+    for (let i = 1; i < lines.length; i++) {
+      const cols = parseCsvLine(lines[i]);
+      const station = (cols[0] || '').trim();
+      if (!station) continue;
+      if (!knownStations.has(station)) { skipped++; continue; }
+      const aActual = normalizeTime(cols[2]);
+      const bActual = normalizeTime(cols[4]);
+      if (aActual) { a[station] = aActual; imported++; }
+      if (bActual) { b[station] = bActual; imported++; }
+    }
+    if (imported === 0) throw new Error('找不到任何有效時間（請確認 A線實際 / B線實際 欄位格式為 HH:MM）');
+
+    stationImportData = { a, b };
+    renderStationPreview(imported);
+    document.getElementById('clearStationBtn').classList.remove('hidden');
+    if (skipped > 0) {
+      status.insertAdjacentHTML('beforeend', ` <span class="muted">（略過 ${skipped} 個未知節點）</span>`);
+    }
+  } catch (err) {
+    status.innerHTML = `<span class="import-error">❌ 匯入失敗：${err.message}</span>`;
+  } finally {
+    e.target.value = '';
+  }
+}
+
+function renderStationPreview(importedCount) {
+  const status = document.getElementById('stationImportStatus');
+  const preview = document.getElementById('stationImportPreview');
+  const stations = window.SEED.stations;
+  const std = window.SEED.standards.stations;
+  const total = stations.length * 2;
+
+  status.innerHTML = `✅ 已匯入 <strong>${importedCount}</strong> / ${total} 個時間`;
+
+  preview.innerHTML = `<table class="preview-table"><thead><tr>
+    <th>節點</th><th>A 標準</th><th>A 實際</th><th>B 標準</th><th>B 實際</th>
+  </tr></thead><tbody>` + stations.map(s => {
+    const aA = stationImportData.a[s] || '';
+    const bA = stationImportData.b[s] || '';
+    return `<tr>
+      <td><strong>${s}</strong></td>
+      <td class="muted">${std[s]?.A || ''}</td>
+      <td>${aA || '<span class="muted">—</span>'}</td>
+      <td class="muted">${std[s]?.B || ''}</td>
+      <td>${bA || '<span class="muted">—</span>'}</td>
+    </tr>`;
+  }).join('') + '</tbody></table>';
+  preview.classList.remove('hidden');
+}
+
+function loadStationDataFromRecord(rec) {
+  stationImportData = {
+    a: { ...(rec.aStations || {}) },
+    b: { ...(rec.bStations || {}) },
+  };
+  let count = 0;
+  for (const v of Object.values(stationImportData.a)) if (v) count++;
+  for (const v of Object.values(stationImportData.b)) if (v) count++;
+
+  const status = document.getElementById('stationImportStatus');
+  const preview = document.getElementById('stationImportPreview');
+  const clearBtn = document.getElementById('clearStationBtn');
+  if (count > 0) {
+    renderStationPreview(count);
+    clearBtn.classList.remove('hidden');
+  } else {
+    status.textContent = '尚未匯入。請先下載範例檔填寫後上傳。';
+    preview.classList.add('hidden');
+    clearBtn.classList.add('hidden');
+  }
+}
+
+function clearStationImport() {
+  stationImportData = { a: {}, b: {} };
+  document.getElementById('stationImportStatus').textContent = '已清除。請重新下載範例檔填寫後上傳。';
+  document.getElementById('stationImportPreview').classList.add('hidden');
+  document.getElementById('clearStationBtn').classList.add('hidden');
 }
 
 function renderVarianceWarning(rec) {
@@ -740,6 +864,9 @@ async function init() {
 
   document.getElementById('actualForm').addEventListener('submit', saveActualForm);
   document.getElementById('actualDate').addEventListener('change', renderActualForm);
+  document.getElementById('downloadTemplateBtn').addEventListener('click', downloadStationTemplate);
+  document.getElementById('stationFileInput').addEventListener('change', handleStationFileImport);
+  document.getElementById('clearStationBtn').addEventListener('click', clearStationImport);
   document.getElementById('actPicks').addEventListener('input', () => {
     const rec = getRecord(document.getElementById('actualDate').value) || {};
     renderVarianceWarning(rec);

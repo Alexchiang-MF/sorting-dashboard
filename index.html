@@ -125,10 +125,21 @@
             <input type="time" id="actTotalEnd">
           </label>
         </div>
-        <details class="station-details">
-          <summary>填寫各節點結束時間（選填，供延遲分析）</summary>
-          <div id="stationInputs" class="station-grid"></div>
-        </details>
+        <div class="station-import">
+          <div class="station-import-head">
+            <strong>各節點結束時間</strong>
+            <span class="muted">（選填，供延遲分析；用 CSV 匯入更快）</span>
+          </div>
+          <div class="station-import-actions">
+            <button type="button" id="downloadTemplateBtn" class="ghost-btn always-enabled">📥 下載範例檔 (CSV)</button>
+            <label class="ghost-btn upload-btn" for="stationFileInput">📤 匯入填寫檔
+              <input type="file" id="stationFileInput" accept=".csv,text/csv" hidden>
+            </label>
+            <button type="button" id="clearStationBtn" class="ghost-btn danger hidden">清除匯入</button>
+          </div>
+          <div id="stationImportStatus" class="station-import-status muted">尚未匯入。請先下載範例檔填寫後上傳。</div>
+          <div id="stationImportPreview" class="station-import-preview hidden"></div>
+        </div>
         <div class="variance-warning hidden" id="varianceWarn">
           <strong id="varianceTitle">⚠ 揀次差異警示</strong>
           <p class="muted" id="varianceDetail"></p>
@@ -205,9 +216,9 @@
             <tr>
               <th>節點</th>
               <th>標準</th>
-              <th>A 班實際</th>
+              <th>A 線實際</th>
               <th>A 差異</th>
-              <th>B 班實際</th>
+              <th>B 線實際</th>
               <th>B 差異</th>
             </tr>
           </thead>
