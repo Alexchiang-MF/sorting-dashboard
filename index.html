@@ -148,7 +148,10 @@
             <textarea id="varianceNote" rows="3" placeholder="請輸入差異原因（例如：突發促銷、系統異常、標案放量…）"></textarea>
           </label>
         </div>
-        <button type="submit">儲存實際資料</button>
+        <div class="actual-form-actions">
+          <button type="submit">儲存實際資料</button>
+          <button type="button" id="deleteActualBtn" class="ghost-btn danger hidden">🗑 清除此日資料</button>
+        </div>
       </form>
     </section>
 
@@ -225,6 +228,20 @@
           </thead>
           <tbody id="stationTableBody"></tbody>
         </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Note Detail Modal -->
+  <div class="modal-backdrop hidden" id="noteModal">
+    <div class="modal-card login-card">
+      <div class="modal-head">
+        <h3 id="noteModalTitle">備註詳情</h3>
+        <button class="close-btn" id="noteModalClose">×</button>
+      </div>
+      <div class="modal-body">
+        <p id="noteModalDate" class="muted" style="margin-top: 0;"></p>
+        <div id="noteModalContent" style="white-space: pre-wrap; font-size: 14px; line-height: 1.6; word-break: break-all;"></div>
       </div>
     </div>
   </div>

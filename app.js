@@ -99,6 +99,21 @@ async function upsertUserEntry(date, patch) {
   }
 }
 
+async function deleteUserEntry(date) {
+  if (!confirm(`確定要清除 ${date} 的所有預估與實際資料嗎？`)) return;
+  delete userCache[date];
+  if (supa) {
+    const { error } = await supa.from('entries').delete().eq('date', date);
+    if (error) { alert('刪除失敗：' + error.message); throw error; }
+  } else {
+    saveUserCacheLS();
+  }
+  renderAll();
+  renderForecast();
+  renderActualForm();
+  alert('已清除 ' + date + ' 的資料');
+}
+
 // ============ Auth ============
 let authCache = { logged: false, user: null };
 
@@ -130,6 +145,7 @@ function applyAuthState() {
       el.disabled = !logged;
     });
   });
+  renderActualForm();
 }
 
 function openLoginModal() {
@@ -479,6 +495,9 @@ function renderHistory(records) {
     if (chk.status === 'ontime') statusPill = `<span class="status-pill ontime">準時</span>`;
     else if (chk.status === 'delayed') statusPill = `<span class="status-pill delayed" data-date="${r.date}">延遲 ${chk.diff}分</span>`;
     else statusPill = `<span class="status-pill nodata">—</span>`;
+    const hasNote = Boolean(r.varianceNote);
+    const noteCls = hasNote ? 'note-cell clickable' : 'note-cell';
+    const noteAttr = hasNote ? `data-date="${r.date}"` : '';
     return `<tr>
       <td>${r.date}</td>
       <td>週${WEEKDAY_TW[r.weekday]}</td>
@@ -489,7 +508,7 @@ function renderHistory(records) {
       <td>${ratio}</td>
       <td>${r.totalEnd || '—'}</td>
       <td>${statusPill}</td>
-      <td class="note-cell" title="${(r.varianceNote || '').replace(/"/g,'&quot;')}">${r.varianceNote || ''}</td>
+      <td class="${noteCls}" ${noteAttr} title="${(r.varianceNote || '').replace(/"/g,'&quot;')}">${r.varianceNote || ''}</td>
     </tr>`;
   }).join('');
 
@@ -497,6 +516,16 @@ function renderHistory(records) {
     el.addEventListener('click', () => {
       const date = el.dataset.date;
       openStationModal(getRecord(date));
+    });
+  });
+
+  tbody.querySelectorAll('.note-cell.clickable').forEach(el => {
+    el.addEventListener('click', () => {
+      const date = el.dataset.date;
+      const rec = getRecord(date);
+      if (rec && rec.varianceNote) {
+        openNoteModal(date, rec.varianceNote);
+      }
     });
   });
 }
@@ -539,6 +568,17 @@ function openStationModal(rec) {
 
 function closeModal() {
   document.getElementById('modal').classList.add('hidden');
+}
+
+function openNoteModal(date, note) {
+  document.getElementById('noteModalTitle').textContent = `備註詳情 (${date})`;
+  document.getElementById('noteModalDate').textContent = fmtDateLabel(date);
+  document.getElementById('noteModalContent').textContent = note || '';
+  document.getElementById('noteModal').classList.remove('hidden');
+}
+
+function closeNoteModal() {
+  document.getElementById('noteModal').classList.add('hidden');
 }
 
 // ============ Forecast form ============
@@ -615,6 +655,13 @@ function renderActualForm() {
   loadStationDataFromRecord(rec);
   renderVarianceWarning(rec);
   document.getElementById('varianceNote').value = rec.varianceNote ?? '';
+
+  const deleteBtn = document.getElementById('deleteActualBtn');
+  if (deleteBtn) {
+    const hasAnyData = rec && (rec.estPicks != null || rec.totalPicks != null || rec.totalBoxes != null || rec.totalEnd != null);
+    deleteBtn.classList.toggle('hidden', !hasAnyData);
+    deleteBtn.disabled = !isLoggedIn();
+  }
 }
 
 // ============ Station CSV import ============
@@ -916,6 +963,17 @@ async function init() {
   document.getElementById('modalClose').addEventListener('click', closeModal);
   document.getElementById('modal').addEventListener('click', (e) => {
     if (e.target.id === 'modal') closeModal();
+  });
+
+  // 刪除按鈕與備註 Modal 綁定
+  document.getElementById('deleteActualBtn').addEventListener('click', () => {
+    const date = document.getElementById('actualDate').value;
+    if (date) deleteUserEntry(date);
+  });
+
+  document.getElementById('noteModalClose').addEventListener('click', closeNoteModal);
+  document.getElementById('noteModal').addEventListener('click', (e) => {
+    if (e.target.id === 'noteModal') closeNoteModal();
   });
 
   // Auth 綁定

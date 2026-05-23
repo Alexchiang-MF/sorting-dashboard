@@ -2,7 +2,17 @@ import openpyxl, json, datetime, sys, io
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 SRC = '../2026分揀揀次.xlsx'
-TODAY = datetime.date(2026, 4, 22)
+
+# 預設使用今天，或從 CLI 參數解析指定日期 (格式: YYYY-MM-DD)
+TODAY = datetime.date.today()
+if len(sys.argv) > 1:
+    try:
+        TODAY = datetime.date.fromisoformat(sys.argv[1])
+    except ValueError:
+        print("Error: Invalid date format. Please use YYYY-MM-DD (e.g. 2026-04-22)")
+        sys.exit(1)
+
+print(f"Target TODAY date for seed: {TODAY.strftime('%Y-%m-%d')}")
 
 wb = openpyxl.load_workbook(SRC, data_only=True)
 ws = wb['總表']
